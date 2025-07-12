@@ -122,6 +122,7 @@ data-preprocessing-mvp/
 
 ### Model Selection
 
+
 The app supports multiple OpenAI models:
 
 -   `gpt-4o` (Recommended): Best balance of quality and speed

@@ -112,19 +112,55 @@ def undo_changes():
         st.warning("No changes to undo!")
         
 def clean_dataframe_for_display(df: pd.DataFrame) -> pd.DataFrame:
-    """Clean DataFrame for Arrow compatibility"""
+    """Clean DataFrame to be compatible with Streamlit's PyArrow serialization."""
+    if df is None:
+        return None
+    
     df_clean = df.copy()
     
+    # Handle each column type appropriately
     for col in df_clean.columns:
-        # Fix object columns with mixed types
-        if df_clean[col].dtype == 'object':
-            df_clean[col] = df_clean[col].astype(str).replace('nan', '').replace('None', '')
-        
-        # Fix float columns that might have precision issues
-        elif df_clean[col].dtype in ['float64', 'float32']:
-            # Round to avoid precision errors
-            df_clean[col] = df_clean[col].round(6)
-            # Convert NaN to None for better Arrow handling
-            df_clean[col] = df_clean[col].where(pd.notna(df_clean[col]), None)
+        try:
+            # For object/string columns, convert to string
+            if df_clean[col].dtype == 'object':
+                df_clean[col] = df_clean[col].astype(str)
+            
+            # For datetime columns, convert to string
+            elif pd.api.types.is_datetime64_any_dtype(df_clean[col]):
+                df_clean[col] = df_clean[col].astype(str)
+            
+            # For boolean columns, convert to string
+            elif df_clean[col].dtype == 'bool':
+                df_clean[col] = df_clean[col].astype(str)
+            
+            # For numeric columns, try to keep as numeric but handle any issues
+            elif pd.api.types.is_numeric_dtype(df_clean[col]):
+                # Check if there are any problematic values
+                try:
+                    pd.to_numeric(df_clean[col], errors='raise')
+                except (ValueError, TypeError):
+                    # If numeric conversion fails, convert to string
+                    df_clean[col] = df_clean[col].astype(str)
+            
+            # For any other type, convert to string
+            else:
+                df_clean[col] = df_clean[col].astype(str)
+                
+        except Exception as e:
+            # If any conversion fails, convert to string as fallback
+            df_clean[col] = df_clean[col].astype(str)
+    
+    # Final safety check - ensure all columns are string type and handle any problematic values
+    for col in df_clean.columns:
+        try:
+            # Replace any problematic values with empty string
+            df_clean[col] = df_clean[col].fillna('')
+            df_clean[col] = df_clean[col].replace([np.inf, -np.inf], '')
+            df_clean[col] = df_clean[col].astype(str)
+            # Replace any remaining problematic strings
+            df_clean[col] = df_clean[col].replace(['nan', 'None', 'NaN', 'NULL', 'null'], '')
+        except Exception as e:
+            # If even string conversion fails, replace with placeholder
+            df_clean[col] = pd.Series([''] * len(df_clean), dtype=str)
     
     return df_clean
