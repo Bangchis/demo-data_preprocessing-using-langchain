@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import streamlit as st
 import pickle
 import os
@@ -25,19 +26,55 @@ def load_uploaded_file(uploaded_file) -> pd.DataFrame:
         else:
             raise ValueError("Unsupported file format")
         
-        # Fix data types for Arrow compatibility
-        for col in df.columns:
-            if df[col].dtype == 'object':
-                # Try to convert to numeric if possible
-                try:
-                    df[col] = pd.to_numeric(df[col], errors='ignore')
-                except:
-                    pass
-                # Convert remaining objects to string
-                if df[col].dtype == 'object':
-                    df[col] = df[col].astype(str)
+        # Apply comprehensive cleaning for Arrow compatibility
+        df_clean = df.copy()
         
-        return df
+        # Handle each column type appropriately
+        for col in df_clean.columns:
+            try:
+                # For object/string columns, convert to string
+                if df_clean[col].dtype == 'object':
+                    df_clean[col] = df_clean[col].astype(str)
+                
+                # For datetime columns, convert to string
+                elif pd.api.types.is_datetime64_any_dtype(df_clean[col]):
+                    df_clean[col] = df_clean[col].astype(str)
+                
+                # For boolean columns, convert to string
+                elif df_clean[col].dtype == 'bool':
+                    df_clean[col] = df_clean[col].astype(str)
+                
+                # For numeric columns, try to keep as numeric but handle any issues
+                elif pd.api.types.is_numeric_dtype(df_clean[col]):
+                    # Check if there are any problematic values
+                    try:
+                        pd.to_numeric(df_clean[col], errors='raise')
+                    except (ValueError, TypeError):
+                        # If numeric conversion fails, convert to string
+                        df_clean[col] = df_clean[col].astype(str)
+                
+                # For any other type, convert to string
+                else:
+                    df_clean[col] = df_clean[col].astype(str)
+                    
+            except Exception as e:
+                # If any conversion fails, convert to string as fallback
+                df_clean[col] = df_clean[col].astype(str)
+        
+        # Final safety check - ensure all columns are string type and handle any problematic values
+        for col in df_clean.columns:
+            try:
+                # Replace any problematic values with empty string
+                df_clean[col] = df_clean[col].fillna('')
+                df_clean[col] = df_clean[col].replace([np.inf, -np.inf], '')
+                df_clean[col] = df_clean[col].astype(str)
+                # Replace any remaining problematic strings
+                df_clean[col] = df_clean[col].replace(['nan', 'None', 'NaN', 'NULL', 'null'], '')
+            except Exception as e:
+                # If even string conversion fails, replace with placeholder
+                df_clean[col] = pd.Series([''] * len(df_clean), dtype=str)
+        
+        return df_clean
     except Exception as e:
         st.error(f"Error loading file {uploaded_file.name}: {str(e)}")
         return None
