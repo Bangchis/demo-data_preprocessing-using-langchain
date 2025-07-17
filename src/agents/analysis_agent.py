@@ -20,9 +20,7 @@ import io
 import base64
 
 # Import our utility modules
-import panel_utils
-import time_series_utils
-import cross_sectional_utils
+from src.analysis.utils import panel_utils, time_series_utils, cross_sectional_utils
 
 class AnalysisPromptTemplate(StringPromptTemplate):
     """Custom prompt template for the analysis agent."""

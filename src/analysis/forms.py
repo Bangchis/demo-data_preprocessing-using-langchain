@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from analysis_ui import get_numeric_columns, handle_numeric_detection_fallback
+from .ui import get_numeric_columns, handle_numeric_detection_fallback
 
 def prompt_user_for_inputs(function_name, df, analysis_tool):
     """Prompt user for required inputs based on the function being called."""

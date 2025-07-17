@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils import clean_dataframe_for_display
+from src.core.utils import clean_dataframe_for_display
 
 def render_data_types_section(df):
     """Render data types and missing values section."""

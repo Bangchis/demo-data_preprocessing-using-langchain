@@ -1,17 +1,46 @@
 import streamlit as st
 import os
-from utils import load_uploaded_file, apply_changes, undo_changes, clean_dataframe_for_display
-from agent_manager import AgentManager
-from analysis_agent import create_analysis_agent
+from src.core.utils import load_uploaded_file, load_uploaded_file_preserve_types, apply_changes, undo_changes, clean_dataframe_for_display, get_current_dataframe_for_display
+# from src.ui.data_view_controller import get_current_dataframe_for_agent  # Simplified: removed complex view controller
+from src.agents.react_agent import AgentManager
+from src.agents.analysis_agent import create_analysis_agent
+from src.core.backup_manager import backup_manager
 
 def initialize_session_state():
     """Initialize session state for the application."""
-    from utils import init_session_state
+    from src.core.utils import init_session_state
     init_session_state()
     
     # Initialize session state for analysis console
     if "console_log" not in st.session_state:
         st.session_state.console_log = []
+    
+    # Initialize session state for ReAct agent
+    if "react_chat_history" not in st.session_state:
+        st.session_state.react_chat_history = []
+    
+    # Initialize session state for execution logging
+    if "execution_log" not in st.session_state:
+        st.session_state.execution_log = []
+    
+    # Initialize session state for checkpoints
+    if "checkpoints" not in st.session_state:
+        st.session_state.checkpoints = []
+    
+    if "checkpoint_index" not in st.session_state:
+        st.session_state.checkpoint_index = -1
+    
+    # Initialize session state for web search
+    if "web_search_log" not in st.session_state:
+        st.session_state.web_search_log = []
+    
+    # Initialize current time for logging
+    if "current_time" not in st.session_state:
+        import datetime
+        st.session_state.current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Initialize backup system session state
+    backup_manager._ensure_session_state()
 
 def setup_agents(model_choice):
     """Initialize and setup AI agents."""
@@ -60,21 +89,47 @@ def render_file_upload_sidebar():
         if uploaded_files:
             for uploaded_file in uploaded_files:
                 if uploaded_file.name not in st.session_state.dfs:
-                    df = load_uploaded_file(uploaded_file)
-                    if df is not None:
-                        st.session_state.dfs[uploaded_file.name] = df
-                        st.success(f"✅ Loaded {uploaded_file.name}")
+                    # Use new type-preserving loader with raw data support
+                    df_raw, df_original, df_display = load_uploaded_file_preserve_types(uploaded_file)
+                    if df_raw is not None and df_original is not None and df_display is not None:
+                        # Store all three versions
+                        st.session_state.dfs_raw[uploaded_file.name] = df_raw
+                        st.session_state.dfs_original[uploaded_file.name] = df_original
+                        st.session_state.dfs_display[uploaded_file.name] = df_display
+                        st.session_state.dfs[uploaded_file.name] = df_display  # Legacy compatibility
+                        
+                        st.success(f"✅ Loaded {uploaded_file.name} (raw + processed + display versions)")
                         
                         # Set as main df if first file
                         if st.session_state.df is None:
-                            st.session_state.df = df.copy()
+                            st.session_state.df_raw = df_raw.copy()
+                            st.session_state.df_original = df_original.copy()
+                            st.session_state.df_display = df_display.copy()
+                            st.session_state.df = df_display.copy()  # Legacy compatibility
         
         # Display loaded files
         if st.session_state.dfs:
             st.subheader("📊 Loaded Files")
             for filename in st.session_state.dfs.keys():
                 rows, cols = st.session_state.dfs[filename].shape
-                st.write(f"• **{filename}**: {rows} rows, {cols} cols")
+                
+                # Show comprehensive data information
+                if filename in st.session_state.get("dfs_original", {}):
+                    df_orig = st.session_state.dfs_original[filename]
+                    numeric_cols = len(df_orig.select_dtypes(include=['number']).columns)
+                    datetime_cols = len(df_orig.select_dtypes(include=['datetime']).columns)
+                    bool_cols = len(df_orig.select_dtypes(include=['bool']).columns)
+                    
+                    st.write(f"• **{filename}**: {rows} rows, {cols} cols")
+                    st.write(f"  📊 Processed: {numeric_cols} numeric, {datetime_cols} datetime, {bool_cols} boolean")
+                    
+                    # Show raw data info if available
+                    if filename in st.session_state.get("dfs_raw", {}):
+                        df_raw = st.session_state.dfs_raw[filename]
+                        raw_object_cols = len(df_raw.select_dtypes(include=['object']).columns)
+                        st.write(f"  📄 Raw: {raw_object_cols} object, {cols - raw_object_cols} non-object")
+                else:
+                    st.write(f"• **{filename}**: {rows} rows, {cols} cols")
 
 def render_control_buttons():
     """Render control buttons in sidebar."""
@@ -166,18 +221,39 @@ def render_data_preview():
     """Render data preview section."""
     st.subheader("📊 Current Data Preview")
     
-    # Display basic info
-    rows, cols = st.session_state.df.shape
-    st.write(f"**Shape**: {rows} rows × {cols} columns")
+    # Get the current DataFrame for display (use df_original if available for better info)
+    current_df_for_display = get_current_dataframe_for_display()
+    original_df = st.session_state.get("df_original", None)
     
-    # Display data
-    try:
-        clean_df = clean_dataframe_for_display(st.session_state.df.head(20))
-        st.dataframe(clean_df, use_container_width=True)
-    except Exception as e:
-        st.warning(f"Display issue with dataframe: {str(e)}")
-        # Fallback: show as text
-        st.text(str(st.session_state.df.head(20)))
+    if current_df_for_display is not None:
+        # Display basic info
+        rows, cols = current_df_for_display.shape
+        st.write(f"**Shape**: {rows} rows × {cols} columns")
+        
+        # Show data types summary if we have original data
+        if original_df is not None:
+            dtype_counts = original_df.dtypes.value_counts()
+            dtype_summary = ", ".join([f"{count} {dtype}" for dtype, count in dtype_counts.items()])
+            st.write(f"**Data Types**: {dtype_summary}")
+        
+        # Display data
+        try:
+            # Show first 20 rows
+            st.dataframe(current_df_for_display.head(20), use_container_width=True)
+            
+            # Show processing information if available
+            if st.session_state.get("processing_pipeline"):
+                st.info("💡 **Tip**: CodeRunner operates on the processed data with proper data types.")
+                
+        except Exception as e:
+            st.warning(f"Display issue with dataframe: {str(e)}")
+            # Fallback: show as text
+            try:
+                st.text(str(current_df_for_display.head(20)))
+            except:
+                st.error("Unable to display dataframe content.")
+    else:
+        st.info("No data available to preview.")
 
 def render_welcome_screen():
     """Render welcome screen when no data is loaded."""

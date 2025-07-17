@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from utils import clean_dataframe_for_display
+from src.core.utils import clean_dataframe_for_display
 
 def get_analysis_toolbar(data_type):
     """Return toolbar buttons based on data type."""

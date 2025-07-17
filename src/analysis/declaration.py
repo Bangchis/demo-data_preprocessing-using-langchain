@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 import os
 import re
-from utils import clean_dataframe_for_display
-from analysis_agent import create_analysis_agent
+from src.core.utils import clean_dataframe_for_display
+# Import moved to function to avoid circular import
 
 def get_ai_data_type_suggestion(df):
     """Get AI suggestion for data type based on heuristics."""
@@ -342,6 +342,7 @@ def handle_panel_data_declaration(model_choice):
                 
                 # Update analysis agent with the transformed dataset
                 if "analysis_agent" in st.session_state:
+                    from src.agents.analysis_agent import create_analysis_agent
                     st.session_state.analysis_agent = create_analysis_agent(
                         api_key=os.getenv("OPENAI_API_KEY"),
                         model_name=model_choice,
