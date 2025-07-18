@@ -8,6 +8,9 @@ import sys
 import pandas as pd
 from unittest.mock import MagicMock
 
+# Add parent directory to path to import from src
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
 # Mock all required modules
 class MockSessionState:
     def __init__(self):
@@ -48,7 +51,7 @@ sys.modules['tools_core'] = MagicMock()
 sys.modules['tools_basic'] = MagicMock()
 sys.modules['tools_web'] = MagicMock()
 
-from agent_manager import AgentManager
+from agents.react_agent import AgentManager
 
 def demo_chat_memory():
     """Demo chat memory functionality"""

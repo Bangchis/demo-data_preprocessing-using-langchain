@@ -8,8 +8,12 @@ import tempfile
 import shutil
 import os
 import json
+import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+
+# Add parent directory to path to import from src
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # Mock streamlit for testing
 class MockStreamlit:
@@ -55,8 +59,8 @@ import sys
 sys.modules['streamlit'] = mock_st
 
 # Now import our backup system
-from src.core.backup_manager import BackupManager
-from src.tools.backup_tools import (
+from core.backup_manager import BackupManager
+from tools.backup_tools import (
     create_manual_backup_tool,
     list_available_backups,
     restore_backup_tool,

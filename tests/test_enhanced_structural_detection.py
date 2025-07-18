@@ -5,11 +5,13 @@ Test script for enhanced structural error detection system
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Add parent directory to path to import from src
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import pandas as pd
 import numpy as np
-from src.tools.enhanced_structural_detection import (
+from tools.enhanced_structural_detection import (
     detect_advanced_structural_errors, 
     StructuralErrorDetector,
     get_structural_error_details

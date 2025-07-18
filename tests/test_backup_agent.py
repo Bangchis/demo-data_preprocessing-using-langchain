@@ -5,9 +5,11 @@ Test script for backup system with ReAct agent
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.tools.backup_tools import (
+# Add parent directory to path to import from src
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from tools.backup_tools import (
     create_manual_backup_tool,
     list_available_backups,
     restore_backup_tool,

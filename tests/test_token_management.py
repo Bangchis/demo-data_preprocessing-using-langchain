@@ -3,9 +3,15 @@ Comprehensive tests for query length handling and token management system
 """
 
 import pytest
+import sys
+import os
 from unittest.mock import Mock, patch
 import streamlit as st
-from src.utils.token_manager import TokenManager, get_token_manager, count_tokens, is_query_too_long
+
+# Add parent directory to path to import from src
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from utils.token_manager import TokenManager, get_token_manager, count_tokens, is_query_too_long
 
 
 class TestTokenManager:

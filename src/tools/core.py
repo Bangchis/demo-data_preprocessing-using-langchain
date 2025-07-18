@@ -289,15 +289,27 @@ def clean_code_input(code: str) -> str:
         raise ValueError("❌ Code contains comments. Only pure Python code is allowed.")
     
     # Additional cleanup for common agent artifacts
-    # Remove any trailing quotes that might remain
-    code = code.strip().rstrip('"').rstrip("'")
-    
     # Remove any remaining markdown artifacts
     code = code.replace('```python', '').replace('```py', '').replace('```', '')
     
     # Fix common variable reference issues
     # Replace st.session_state.df with df for code execution
     code = code.replace('st.session_state.df', 'df')
+    
+    # Only remove surrounding quotes if they wrap the ENTIRE code block
+    # and the code inside is syntactically valid
+    code = code.strip()
+    if len(code) >= 2:
+        # Check if the entire code is wrapped in quotes
+        if ((code.startswith('"') and code.endswith('"')) or 
+            (code.startswith("'") and code.endswith("'"))):
+            # Extract the inner code
+            inner_code = code[1:-1].strip()
+            # Only unwrap if the inner code doesn't contain the same quote type
+            if code.startswith('"') and '"' not in inner_code:
+                code = inner_code
+            elif code.startswith("'") and "'" not in inner_code:
+                code = inner_code
     
     return code.strip()
 

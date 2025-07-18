@@ -3,7 +3,11 @@
 Tool implementations for the ReAct agent system.
 """
 
-# Import modules, not all functions to avoid circular imports
-from . import core
-from . import basic
-from . import web
+# Import modules conditionally to avoid dependency issues when testing
+try:
+    from . import core
+    from . import basic
+    from . import web
+except ImportError:
+    # Allow testing without full dependencies
+    pass
