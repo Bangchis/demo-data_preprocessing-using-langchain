@@ -11,7 +11,7 @@ from src.utils.token_manager import TokenManager, get_token_manager
 
 # Import all tools
 from src.tools.core import (
-    CodeRunnerTool, UndoTool, RedoTool, ExecutionLogTool
+    CodeRunnerTool, UndoTool, RedoTool, ExecutionLogTool, ResetEnvironmentTool
 )
 from src.tools.basic import (
     QuickInfoTool, MissingReportTool, DuplicateCheckTool, ColumnSummaryTool,
@@ -23,7 +23,8 @@ from src.tools.web import (
 )
 from src.tools.backup_tools import (
     ManualBackupTool, ListBackupsTool, RestoreBackupTool, BackupStatsTool, 
-    DeleteBackupTool, QuickBackupTool, CleanupBackupsTool
+    DeleteBackupTool, QuickBackupTool, SessionCleanupTool,
+    DeleteAllBackupsTool
 )
 
 
@@ -48,6 +49,7 @@ class AgentManager:
             UndoTool,
             RedoTool,
             ExecutionLogTool,
+            ResetEnvironmentTool,
             
             # Data exploration tools
             QuickInfoTool,
@@ -76,7 +78,8 @@ class AgentManager:
             BackupStatsTool,
             DeleteBackupTool,
             QuickBackupTool,
-            CleanupBackupsTool
+            SessionCleanupTool,
+            DeleteAllBackupsTool
         ]
     
     def create_agent(self):
@@ -89,10 +92,11 @@ Bạn là DataProcessingAgent – một chuyên gia phân tích và xử lý d�
 Bạn có quyền truy cập vào DataFrame chính (st.session_state.df) cùng các công cụ dưới đây để thực hiện nhiệm vụ.
 
 🔧 CÔNG CỤ XỬ LÝ & THỰC THI:
-• CodeRunner        – Thực thi mã pandas an toàn (TUYỆT ĐỐI KHÔNG ĐƯỢC DÙNG COMMENT #)
+• CodeRunner        – Thực thi mã pandas an toàn với môi trường persistent (TUYỆT ĐỐI KHÔNG ĐƯỢC DÙNG COMMENT #)
 • Undo              – Hoàn tác thao tác gần nhất
 • Redo              – Lặp lại thao tác đã hoàn tác
 • ExecutionLog      – Truy vấn lịch sử các lần thực thi
+• ResetEnvironment  – Reset môi trường thực thi (xóa import và biến)
 
 📊 CÔNG CỤ PHÂN TÍCH & THỐNG KÊ:
 • QuickInfo         – Tóm tắt info(), describe(), và phát hiện lỗi cấu trúc
@@ -121,7 +125,8 @@ Bạn có quyền truy cập vào DataFrame chính (st.session_state.df) cùng c
 • RestoreBackup     – Khôi phục từ backup theo ID
 • BackupStats       – Thống kê backup (tổng số, dung lượng, lần gần nhất)
 • DeleteBackup      – Xóa backup theo ID
-• CleanupBackups    – Dọn dẹp backup tự động cũ
+• SessionCleanup    – Dọn dẹp tất cả backup trong session hiện tại
+• DeleteAllBackups  – XÓA TẤT CẢ backup trong hệ thống (CẨN THẬN!)
 
 🎯 PHƯƠNG PHÁP LÀM VIỆC:
 Bạn sẽ nhận được câu hỏi và phải trả lời bằng cách sử dụng các công cụ có sẵn. Hãy suy nghĩ từng bước và sử dụng công cụ phù hợp để thu thập thông tin.

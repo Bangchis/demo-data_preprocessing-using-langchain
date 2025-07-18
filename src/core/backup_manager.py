@@ -13,6 +13,7 @@ import datetime
 import shutil
 import gzip
 import hashlib
+import uuid
 from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 import warnings
@@ -37,11 +38,17 @@ class BackupManager:
         self.dataframe_dir.mkdir(exist_ok=True)
         self.checkpoint_dir.mkdir(exist_ok=True)
         
-        # Initialize session state
+        # Initialize session state and session ID
         self._ensure_session_state()
+        self._initialize_session_id()
         
         # Load existing metadata
         self.metadata = self._load_metadata()
+        
+        # Configuration for session cleanup (manual only)
+        self.session_timeout_hours = 24  # Default 24 hours
+        self.cleanup_frequency_minutes = 30  # Check every 30 minutes
+        self.max_backups_per_session = 50  # Maximum backups per session
     
     def ensure_backup_directory(self):
         """Ensure backup directory exists"""
@@ -70,6 +77,27 @@ class BackupManager:
             
             if "backup_history" not in st.session_state:
                 st.session_state.backup_history = []
+        except Exception:
+            # If session state is not available, silently continue
+            pass
+    
+    def _initialize_session_id(self):
+        """Initialize unique session ID for backup tracking"""
+        if not hasattr(st, 'session_state'):
+            return
+        
+        try:
+            if "session_id" not in st.session_state:
+                # Generate unique session ID
+                session_id = str(uuid.uuid4())[:8]
+                st.session_state.session_id = session_id
+                st.session_state.session_start_time = datetime.datetime.now().isoformat()
+                
+                # Store session info
+                if "backup_status" in st.session_state:
+                    st.session_state.backup_status["session_id"] = session_id
+                    st.session_state.backup_status["session_start_time"] = st.session_state.session_start_time
+                    
         except Exception:
             # If session state is not available, silently continue
             pass
@@ -116,7 +144,9 @@ class BackupManager:
                 "timestamp": timestamp,
                 "created_at": datetime.datetime.now().isoformat(),
                 "dataframe_shape": before_df.shape if before_df is not None else None,
-                "session_state_keys": list(st.session_state.keys()) if hasattr(st, 'session_state') else []
+                "session_state_keys": list(st.session_state.keys()) if hasattr(st, 'session_state') else [],
+                "session_id": getattr(st.session_state, 'session_id', None) if hasattr(st, 'session_state') else None,
+                "session_start_time": getattr(st.session_state, 'session_start_time', None) if hasattr(st, 'session_state') else None
             }
             
             # Save DataFrame if provided
@@ -177,7 +207,9 @@ class BackupManager:
                 "timestamp": timestamp,
                 "created_at": datetime.datetime.now().isoformat(),
                 "dataframe_shape": st.session_state.df.shape if hasattr(st.session_state, 'df') and st.session_state.df is not None else None,
-                "session_state_keys": list(st.session_state.keys()) if hasattr(st, 'session_state') else []
+                "session_state_keys": list(st.session_state.keys()) if hasattr(st, 'session_state') else [],
+                "session_id": getattr(st.session_state, 'session_id', None) if hasattr(st, 'session_state') else None,
+                "session_start_time": getattr(st.session_state, 'session_start_time', None) if hasattr(st, 'session_state') else None
             }
             
             # Save DataFrame if available
@@ -223,7 +255,7 @@ class BackupManager:
     
     def restore_backup(self, backup_id: str) -> bool:
         """
-        Restore a backup by ID
+        Restore a backup by ID with full DataFrame synchronization
         
         Args:
             backup_id: Unique identifier of the backup to restore
@@ -245,12 +277,21 @@ class BackupManager:
                 st.error(f"Backup {backup_id} not found")
                 return False
             
+            # Store original shape for comparison
+            original_shape = None
+            if hasattr(st.session_state, 'df') and st.session_state.df is not None:
+                original_shape = st.session_state.df.shape
+            
+            restored_df = None
+            restored_df_original = None
+            
             # Restore DataFrame
             if "dataframe_path" in backup_info:
                 df_path = Path(backup_info["dataframe_path"])
                 if df_path.exists():
                     df = self._load_dataframe(df_path)
                     if df is not None:
+                        restored_df = df
                         st.session_state.df = df
                         # Also update dfs dictionary
                         if "dfs" not in st.session_state:
@@ -263,11 +304,19 @@ class BackupManager:
                 if df_orig_path.exists():
                     df_original = self._load_dataframe(df_orig_path)
                     if df_original is not None:
+                        restored_df_original = df_original
                         st.session_state.df_original = df_original
                         # Also update dfs_original dictionary
                         if "dfs_original" not in st.session_state:
                             st.session_state.dfs_original = {}
                         st.session_state.dfs_original["df"] = df_original.copy()
+            
+            # Synchronize all DataFrame versions using the available restored data
+            # Priority: df_original > df
+            if restored_df_original is not None:
+                self._sync_all_dataframe_versions(restored_df_original)
+            elif restored_df is not None:
+                self._sync_all_dataframe_versions(restored_df)
             
             # Restore session state (selective restoration)
             if "session_path" in backup_info:
@@ -279,12 +328,36 @@ class BackupManager:
             if hasattr(st.session_state, 'backup_status'):
                 st.session_state.backup_status["last_restore"] = backup_id
             
+            # Clear persistent execution environment to ensure fresh start
+            if hasattr(st.session_state, 'code_execution_env'):
+                st.session_state.code_execution_env = {}
+            
+            # Trigger UI refresh
+            st.rerun()
+            
             st.success(f"✅ Backup {backup_id} restored successfully!")
             return True
             
         except Exception as e:
             st.error(f"Error restoring backup {backup_id}: {e}")
             return False
+    
+    def _sync_all_dataframe_versions(self, df: pd.DataFrame):
+        """
+        Synchronize all DataFrame versions after restore
+        
+        Args:
+            df: The restored DataFrame to sync across all versions
+        """
+        try:
+            # Import the sync function from utils
+            from src.core.utils import sync_dataframe_versions
+            
+            # Use the existing sync function
+            sync_dataframe_versions(df)
+            
+        except Exception as e:
+            st.error(f"Error synchronizing DataFrame versions: {e}")
     
     def _save_dataframe(self, df: pd.DataFrame, path: Path):
         """Save DataFrame to compressed pickle file"""
@@ -398,28 +471,126 @@ class BackupManager:
             st.error(f"Error deleting backup {backup_id}: {e}")
             return False
     
-    def cleanup_old_backups(self, max_backups: int = 50):
-        """Clean up old automatic backups, keeping only the most recent ones"""
+    
+    def cleanup_session_backups(self, session_id: str = None) -> int:
+        """Clean up backups from a specific session"""
         try:
-            # Get all automatic backups sorted by timestamp
-            auto_backups = [
+            if session_id is None:
+                # Use current session ID
+                session_id = getattr(st.session_state, 'session_id', None)
+                if not session_id:
+                    return 0
+            
+            # Find backups for this session
+            session_backups = [
                 backup for backup in self.metadata["backups"]
-                if backup.get("type") == "automatic"
+                if backup.get("session_id") == session_id
             ]
             
-            # Sort by timestamp (newest first)
-            auto_backups.sort(key=lambda x: x["timestamp"], reverse=True)
+            # Delete all backups for this session
+            deleted_count = 0
+            for backup in session_backups:
+                if self.delete_backup(backup["id"]):
+                    deleted_count += 1
             
-            # Delete old backups
-            backups_to_delete = auto_backups[max_backups:]
-            for backup in backups_to_delete:
-                self.delete_backup(backup["id"])
-            
-            if backups_to_delete:
-                st.info(f"🧹 Cleaned up {len(backups_to_delete)} old automatic backups")
+            return deleted_count
             
         except Exception as e:
-            st.error(f"Error cleaning up old backups: {e}")
+            st.error(f"Error cleaning up session backups: {e}")
+            return 0
+    
+    def _cleanup_expired_sessions(self):
+        """Clean up expired sessions based on timeout"""
+        try:
+            current_time = datetime.datetime.now()
+            timeout_delta = datetime.timedelta(hours=self.session_timeout_hours)
+            
+            # Find expired sessions
+            expired_sessions = []
+            for backup in self.metadata["backups"]:
+                if "session_start_time" in backup:
+                    try:
+                        session_start = datetime.datetime.fromisoformat(backup["session_start_time"])
+                        if current_time - session_start > timeout_delta:
+                            expired_sessions.append(backup["session_id"])
+                    except (ValueError, KeyError):
+                        # Skip backups with invalid timestamps
+                        continue
+            
+            # Remove duplicates
+            expired_sessions = list(set(expired_sessions))
+            
+            # Clean up expired sessions
+            total_deleted = 0
+            for session_id in expired_sessions:
+                deleted = self.cleanup_session_backups(session_id)
+                total_deleted += deleted
+            
+            if total_deleted > 0:
+                st.info(f"🧹 Cleaned up {total_deleted} backups from {len(expired_sessions)} expired sessions")
+                
+        except Exception as e:
+            # Silent failure for background cleanup
+            pass
+    
+    def cleanup_current_session(self) -> int:
+        """Clean up all backups from current session"""
+        try:
+            session_id = getattr(st.session_state, 'session_id', None)
+            if not session_id:
+                return 0
+            
+            deleted_count = self.cleanup_session_backups(session_id)
+            
+            if deleted_count > 0:
+                st.success(f"🧹 Cleaned up {deleted_count} backups from current session")
+            else:
+                st.info("ℹ️ No backups found in current session")
+            
+            return deleted_count
+            
+        except Exception as e:
+            st.error(f"Error cleaning up current session: {e}")
+            return 0
+    
+    def delete_all_backups(self) -> Dict[str, int]:
+        """Delete all backups in the system"""
+        try:
+            # Get current statistics
+            stats_before = self.get_backup_statistics()
+            total_backups = stats_before['total_backups']
+            
+            if total_backups == 0:
+                return {"deleted_count": 0, "total_before": 0}
+            
+            # Get all backup IDs
+            all_backups = self.metadata.get("backups", [])
+            backup_ids = [backup["id"] for backup in all_backups]
+            
+            # Delete all backups
+            deleted_count = 0
+            for backup_id in backup_ids:
+                try:
+                    if self.delete_backup(backup_id):
+                        deleted_count += 1
+                except Exception as e:
+                    # Continue deleting even if one fails
+                    st.warning(f"Failed to delete backup {backup_id}: {e}")
+                    continue
+            
+            # Clear the metadata list
+            self.metadata["backups"] = []
+            self._save_metadata()
+            
+            return {
+                "deleted_count": deleted_count,
+                "total_before": total_backups,
+                "success": deleted_count > 0
+            }
+            
+        except Exception as e:
+            st.error(f"Error deleting all backups: {e}")
+            return {"deleted_count": 0, "total_before": 0, "success": False, "error": str(e)}
     
     def get_backup_statistics(self) -> Dict:
         """Get statistics about backups"""

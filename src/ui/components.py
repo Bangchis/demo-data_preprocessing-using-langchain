@@ -154,6 +154,33 @@ def render_control_buttons():
                 file_name="processed_data.csv",
                 mime="text/csv"
             )
+        
+        # Session cleanup section
+        st.subheader("🧹 Session Cleanup")
+        if hasattr(st.session_state, 'session_id'):
+            # Display session info
+            st.write(f"📋 Session ID: `{st.session_state.session_id}`")
+            
+            if hasattr(st.session_state, 'session_start_time'):
+                import datetime
+                session_start = datetime.datetime.fromisoformat(st.session_state.session_start_time)
+                current_time = datetime.datetime.now()
+                session_duration = (current_time - session_start).total_seconds() / 3600
+                st.write(f"⏱️ Duration: {session_duration:.1f} hours")
+            
+            # Session cleanup button
+            if st.button("🧹 Clean Session Backups", 
+                        help="Remove all backups created in this session"):
+                try:
+                    deleted_count = backup_manager.cleanup_current_session()
+                    if deleted_count > 0:
+                        st.success(f"✅ Cleaned {deleted_count} backups!")
+                    else:
+                        st.info("ℹ️ No backups to clean")
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+        else:
+            st.info("ℹ️ Session tracking not available")
 
 def render_chat_interface(declaration):
     """Render chat interface section."""

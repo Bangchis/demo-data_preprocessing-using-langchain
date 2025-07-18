@@ -339,7 +339,7 @@ def run_code_safely(code: str) -> str:
             st.session_state.execution_log = []
         
         st.session_state.execution_log.append({
-            'timestamp': datetime.now().strftime("%H:%M:%S"),
+            'timestamp': datetime.datetime.now().strftime("%H:%M:%S"),
             'original_code': original_code,
             'cleaned_code': code,
             'comment_filtered': '#' in original_code and '#' not in code
@@ -368,11 +368,15 @@ def run_code_safely(code: str) -> str:
         execution_time = (datetime.datetime.now() - start_time).total_seconds()
         
         if success and updated_df is not None:
+            # Get shape before and after for accurate reporting
+            old_shape = checkpoint_df.shape if checkpoint_df is not None else (0, 0)
+            new_shape = updated_df.shape
+            
             # Synchronize all DataFrame versions
             sync_dataframe_versions(updated_df)
             
             result_msg = f"✅ Code executed successfully!\n"
-            result_msg += f"📊 New shape: {updated_df.shape}\n"
+            result_msg += f"📊 Shape changed: {old_shape} → {new_shape}\n"
             result_msg += f"⏱️ Execution time: {execution_time:.2f}s\n"
             if output:
                 result_msg += f"🔧 Output: {output}"
@@ -454,11 +458,16 @@ def format_result(result) -> str:
 def run_code_directly(code: str) -> Tuple[bool, str, Optional[pd.DataFrame]]:
     """
     Execute pandas code directly in current process with safety measures
+    Maintains persistent execution environment across calls
     """
     try:
         # Basic safety checks
         if not is_code_safe(code):
             return False, "❌ Code contains potentially dangerous operations", None
+        
+        # Initialize persistent execution environment if not exists
+        if not hasattr(st.session_state, 'code_execution_env'):
+            st.session_state.code_execution_env = {}
         
         # Prepare execution environment - use df_original (real data) if available
         # This ensures CodeRunner works with actual data types, not display-optimized data
@@ -467,17 +476,21 @@ def run_code_directly(code: str) -> Tuple[bool, str, Optional[pd.DataFrame]]:
         else:
             working_df = st.session_state.df.copy()
         
-        local_vars = {
+        # Update persistent environment with current dataframe
+        st.session_state.code_execution_env.update({
             'df': working_df,
             'pd': pd,
             'np': np,
             'st': st,
             'datetime': datetime,
-        }
+        })
         
         # If there are other dataframes in session, add them
         if "dfs" in st.session_state:
-            local_vars.update(st.session_state.dfs)
+            st.session_state.code_execution_env.update(st.session_state.dfs)
+        
+        # Use persistent environment for execution
+        local_vars = st.session_state.code_execution_env
         
         # Capture stdout
         old_stdout = sys.stdout
@@ -485,29 +498,15 @@ def run_code_directly(code: str) -> Tuple[bool, str, Optional[pd.DataFrame]]:
         sys.stdout = captured_output
         
         try:
-            # Check if code is a single expression (to capture its result)
-            result_value = None
-            try:
-                # Try to evaluate as expression first
-                result_value = eval(code, {"__builtins__": __builtins__}, local_vars)
-            except SyntaxError:
-                # If it's not a valid expression, execute as statement
-                exec(code, {"__builtins__": __builtins__}, local_vars)
+            # Execute as statement directly to avoid eval/exec issues
+            # This handles complex statements and expressions uniformly
+            exec(code, {"__builtins__": __builtins__}, local_vars)
             
             # Get captured output from print statements
             output = captured_output.getvalue()
             
-            # Format the result if we have one
-            if result_value is not None:
-                formatted_result = format_result(result_value)
-                if formatted_result:
-                    if output:
-                        output += "\n" + formatted_result
-                    else:
-                        output = formatted_result
-            
             # Return the modified dataframe
-            return True, output, local_vars.get('df', st.session_state.df)
+            return True, output, local_vars.get('df', working_df)
             
         finally:
             # Restore stdout
@@ -595,11 +594,21 @@ def show_execution_log(n: str = "5") -> str:
         return f"❌ Error showing logs: {str(e)}"
 
 
+def reset_execution_environment(_: str = "") -> str:
+    """Reset the persistent execution environment"""
+    try:
+        if hasattr(st.session_state, 'code_execution_env'):
+            st.session_state.code_execution_env = {}
+        return "✅ Execution environment reset successfully. All imported modules and variables cleared."
+    except Exception as e:
+        return f"❌ Error resetting environment: {str(e)}"
+
+
 # Create tools
 CodeRunnerTool = Tool(
     name="CodeRunner",
     func=run_code_safely,
-    description="Execute pandas code safely. Updates the main dataframe. Input: Clean Python code WITHOUT comments (#) or markdown (```). Use 'df' variable to access dataframe. Send only executable code, no explanations or comments."
+    description="Execute pandas code safely with persistent execution environment. Updates the main dataframe. Maintains all imports and variables between calls. Input: Clean Python code WITHOUT comments (#) or markdown (```). Use 'df' variable to access dataframe. Send only executable code, no explanations or comments."
 )
 
 UndoTool = Tool(
@@ -618,4 +627,10 @@ ExecutionLogTool = Tool(
     name="ExecutionLog",
     func=show_execution_log,
     description="Show recent code execution logs. Input: number of logs to show (default: 5)."
+)
+
+ResetEnvironmentTool = Tool(
+    name="ResetEnvironment",
+    func=reset_execution_environment,
+    description="Reset the persistent execution environment, clearing all imported modules and variables. Use this when you need a clean slate or encounter import conflicts. No input required."
 )

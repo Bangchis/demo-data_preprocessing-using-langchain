@@ -321,26 +321,6 @@ def render_backup_history_tab():
                         st.warning("Click again to confirm deletion")
                         st.rerun()
     
-    # Cleanup old backups
-    st.markdown("---")
-    st.subheader("Cleanup")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        max_backups = st.number_input(
-            "Maximum automatic backups to keep",
-            min_value=5,
-            max_value=100,
-            value=20,
-            help="Older automatic backups will be deleted"
-        )
-    
-    with col2:
-        if st.button("🧹 Cleanup Old Backups"):
-            with st.spinner("Cleaning up..."):
-                backup_manager.cleanup_old_backups(max_backups)
-                st.rerun()
 
 
 def render_backup_settings_tab():
@@ -422,6 +402,59 @@ def render_backup_settings_tab():
                 file_name="backup_configuration.json",
                 mime="application/json"
             )
+    
+    # Dangerous Operations Section
+    st.markdown("---")
+    st.write("### 🚨 Dangerous Operations")
+    st.warning("⚠️ **These operations are irreversible and will permanently delete data!**")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**Delete All Backups**")
+        st.write("This will permanently delete ALL backups in the system.")
+        
+        # Show current backup count
+        if stats['total_backups'] > 0:
+            st.write(f"📊 **{stats['total_backups']} backups** will be deleted")
+            st.write(f"💾 **{stats['total_size_mb']:.1f} MB** will be freed")
+        else:
+            st.write("📭 No backups to delete")
+    
+    with col2:
+        # Delete all backups button with confirmation
+        if stats['total_backups'] > 0:
+            if st.session_state.get("confirm_delete_all_backups", False):
+                st.error("⚠️ **FINAL CONFIRMATION**")
+                st.write("Click again to permanently delete ALL backups!")
+                
+                col_a, col_b = st.columns(2)
+                
+                with col_a:
+                    if st.button("🗑️ DELETE ALL", type="primary"):
+                        with st.spinner("Deleting all backups..."):
+                            result = backup_manager.delete_all_backups()
+                            
+                            if result.get("success", False):
+                                st.success(f"✅ Deleted {result['deleted_count']} backups successfully!")
+                                st.balloons()
+                            else:
+                                st.error(f"❌ Failed to delete all backups: {result.get('error', 'Unknown error')}")
+                            
+                            # Reset confirmation state
+                            st.session_state.confirm_delete_all_backups = False
+                            st.rerun()
+                
+                with col_b:
+                    if st.button("❌ Cancel"):
+                        st.session_state.confirm_delete_all_backups = False
+                        st.rerun()
+            else:
+                if st.button("🗑️ Delete All Backups"):
+                    st.session_state.confirm_delete_all_backups = True
+                    st.rerun()
+        else:
+            st.write("🚫 No backups to delete")
 
 
 def render_backup_status_indicator():

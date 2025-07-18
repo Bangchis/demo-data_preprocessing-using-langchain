@@ -105,7 +105,7 @@ def list_available_backups(limit: str = "10") -> str:
 
 def restore_backup_tool(backup_id: str) -> str:
     """
-    Restore a backup by ID
+    Restore a backup by ID with full DataFrame synchronization
     
     Args:
         backup_id: Unique identifier of the backup to restore
@@ -124,16 +124,38 @@ def restore_backup_tool(backup_id: str) -> str:
         if not backup_info:
             return f"❌ Backup '{backup_id}' not found"
         
+        # Store current shape for comparison
+        current_shape = None
+        if hasattr(st.session_state, 'df') and st.session_state.df is not None:
+            current_shape = st.session_state.df.shape
+        
         # Restore the backup
         success = backup_manager.restore_backup(backup_id)
         
         if success:
-            shape_info = ""
-            if backup_info.get("dataframe_shape"):
-                shape = backup_info["dataframe_shape"]
-                shape_info = f"\n📊 Restored Data: {shape[0]} rows × {shape[1]} columns"
+            # Get restored shape
+            restored_shape = None
+            if hasattr(st.session_state, 'df') and st.session_state.df is not None:
+                restored_shape = st.session_state.df.shape
             
-            return f"✅ Backup '{backup_id}' restored successfully!{shape_info}\n🔄 Session state has been restored to the backup point."
+            # Build detailed success message
+            result_msg = f"✅ Backup '{backup_id}' restored successfully!\n"
+            
+            # Add shape comparison
+            if backup_info.get("dataframe_shape"):
+                backup_shape = backup_info["dataframe_shape"]
+                result_msg += f"📊 Restored Data: {backup_shape[0]} rows × {backup_shape[1]} columns\n"
+                
+                if current_shape and restored_shape:
+                    result_msg += f"📈 Shape Change: {current_shape} → {restored_shape}\n"
+            
+            # Add synchronization info
+            result_msg += "🔄 All DataFrame versions synchronized (df, df_original, display)\n"
+            result_msg += "🔄 Session state restored to backup point\n"
+            result_msg += "🔄 Execution environment reset\n"
+            result_msg += "✨ UI refreshed - Preview now shows restored data"
+            
+            return result_msg
         else:
             return f"❌ Failed to restore backup '{backup_id}'"
             
@@ -248,41 +270,121 @@ def quick_backup_tool(query: str = "") -> str:
         return f"❌ Error creating quick backup: {str(e)}"
 
 
-def cleanup_old_backups_tool(max_backups: str = "20") -> str:
+
+
+def cleanup_session_backups_tool(query: str = "") -> str:
     """
-    Clean up old automatic backups
+    Clean up all backups from current session
     
     Args:
-        max_backups: Maximum number of automatic backups to keep (default: 20)
+        query: Optional query parameter (not used)
         
     Returns:
         str: Result message
     """
     try:
-        # Clean input
-        max_backups = max_backups.strip().strip('`').strip('"').strip("'")
-        max_count = int(max_backups) if max_backups.isdigit() else 20
+        # Check if session ID exists
+        if not hasattr(st.session_state, 'session_id'):
+            return "❌ No session ID found. Session cleanup not available."
         
-        # Get current backup count
+        session_id = st.session_state.session_id
+        
+        # Get current session stats
         stats_before = backup_manager.get_backup_statistics()
-        auto_backups_before = stats_before['automatic_backups']
+        total_before = stats_before['total_backups']
         
-        # Cleanup
-        backup_manager.cleanup_old_backups(max_count)
+        # Clean up current session
+        deleted_count = backup_manager.cleanup_current_session()
         
-        # Get new backup count
+        # Get updated stats
         stats_after = backup_manager.get_backup_statistics()
-        auto_backups_after = stats_after['automatic_backups']
+        total_after = stats_after['total_backups']
         
-        cleaned_count = auto_backups_before - auto_backups_after
+        result_msg = f"🧹 **Session Cleanup Completed**\n"
+        result_msg += f"📋 Session ID: {session_id}\n"
+        result_msg += f"🗑️ Deleted backups: {deleted_count}\n"
+        result_msg += f"📊 Total backups: {total_before} → {total_after}\n"
         
-        if cleaned_count > 0:
-            return f"✅ Cleaned up {cleaned_count} old automatic backups!\n📊 Remaining automatic backups: {auto_backups_after}"
+        if deleted_count > 0:
+            result_msg += f"✅ Successfully cleaned up {deleted_count} backups from current session!"
         else:
-            return f"ℹ️ No old backups to clean up. Current automatic backups: {auto_backups_after}"
+            result_msg += "ℹ️ No backups found in current session to clean up."
+            
+        return result_msg
+        
+    except Exception as e:
+        return f"❌ Error cleaning up session backups: {str(e)}"
+
+
+def delete_all_backups_tool(confirmation: str = "") -> str:
+    """
+    Delete ALL backups in the system (WARNING: This is irreversible!)
+    
+    Args:
+        confirmation: Must be "CONFIRM DELETE ALL" to proceed
+        
+    Returns:
+        str: Result message
+    """
+    try:
+        # Safety check - require exact confirmation
+        if confirmation.strip().upper() != "CONFIRM DELETE ALL":
+            return """❌ **SAFETY CHECK FAILED**
+            
+⚠️ **This action will DELETE ALL BACKUPS in the system!**
+
+To proceed, you must provide the exact confirmation: "CONFIRM DELETE ALL"
+
+📋 **What will be deleted:**
+- All manual backups from all sessions
+- All automatic backups from all sessions
+- All backup metadata and files
+- This action is IRREVERSIBLE
+
+💡 **Alternative options:**
+- Use SessionCleanup to delete only current session backups
+- Use DeleteBackup to delete individual backups
+
+Are you sure you want to delete ALL backups? If so, use: "CONFIRM DELETE ALL"
+"""
+        
+        # Get current statistics
+        stats_before = backup_manager.get_backup_statistics()
+        total_before = stats_before['total_backups']
+        
+        if total_before == 0:
+            return "ℹ️ No backups found in the system to delete."
+        
+        # Delete all backups
+        result = backup_manager.delete_all_backups()
+        
+        if result.get("success", False):
+            deleted_count = result["deleted_count"]
+            total_before = result["total_before"]
+            
+            result_msg = f"🗑️ **COMPLETE SYSTEM CLEANUP**\n"
+            result_msg += f"📊 Total backups deleted: {deleted_count}/{total_before}\n"
+            result_msg += f"💾 All backup files and metadata removed\n"
+            result_msg += f"🔄 System reset to clean state\n"
+            result_msg += f"✅ **All backups successfully deleted!**\n"
+            result_msg += f"⚠️ This action was irreversible - all backup data is permanently lost"
+            
+            return result_msg
+        else:
+            error_msg = result.get("error", "Unknown error")
+            deleted_count = result.get("deleted_count", 0)
+            total_before = result.get("total_before", 0)
+            
+            result_msg = f"❌ **PARTIAL CLEANUP COMPLETED**\n"
+            result_msg += f"📊 Deleted: {deleted_count}/{total_before} backups\n"
+            result_msg += f"⚠️ Some backups may still remain due to errors\n"
+            result_msg += f"🔧 Error details: {error_msg}\n"
+            result_msg += f"💡 Try running BackupStats to see remaining backups"
+            
+            return result_msg
             
     except Exception as e:
-        return f"❌ Error cleaning up backups: {str(e)}"
+        return f"❌ Error deleting all backups: {str(e)}"
 
 
 # Create LangChain tools
@@ -301,7 +403,7 @@ ListBackupsTool = Tool(
 RestoreBackupTool = Tool(
     name="RestoreBackup",
     func=restore_backup_tool,
-    description="Restore a backup by ID. Input: backup_id. This will overwrite current data and session state with the backup."
+    description="Restore a backup by ID with full DataFrame synchronization. Input: backup_id. This will overwrite current data, synchronize all DataFrame versions (df, df_original, display), reset execution environment, and refresh the UI to show restored data."
 )
 
 BackupStatsTool = Tool(
@@ -322,8 +424,15 @@ QuickBackupTool = Tool(
     description="Create a quick backup with timestamp name. No input required. Use this for emergency backups."
 )
 
-CleanupBackupsTool = Tool(
-    name="CleanupBackups",
-    func=cleanup_old_backups_tool,
-    description="Clean up old automatic backups. Input: maximum number of automatic backups to keep (default: 20)."
+
+SessionCleanupTool = Tool(
+    name="SessionCleanup",
+    func=cleanup_session_backups_tool,
+    description="Clean up all backups from current session. No input required. Use this to clean up session-specific backups when finishing work."
+)
+
+DeleteAllBackupsTool = Tool(
+    name="DeleteAllBackups",
+    func=delete_all_backups_tool,
+    description="Delete ALL backups in the system (WARNING: Irreversible!). Input: 'CONFIRM DELETE ALL' to proceed. This will delete all manual and automatic backups from all sessions. Use with extreme caution."
 )

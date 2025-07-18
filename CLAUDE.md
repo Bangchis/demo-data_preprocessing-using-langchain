@@ -89,6 +89,9 @@ The agent uses 16 specialized tools organized in three categories:
 # Start the main application
 streamlit run app.py
 
+# Alternative: Start from src directory (if app.py imports fail)
+streamlit run src/core/app.py
+
 # Start with specific configuration
 streamlit run app.py --server.port 8501 --server.address 0.0.0.0
 
@@ -101,9 +104,22 @@ streamlit run app.py --server.runOnSave true
 # Install dependencies
 pip install -r requirements.txt
 
-# Set up environment variables in .env file at root
+# Set up environment variables - choose one of these locations:
+# Option 1: Root .env file (copy from template)
+cp .env.example .env
+# Edit .env and add your keys
+
+# Option 2: config/.env file (already exists)
+# Edit config/.env and add your keys
+
+# Required environment variables:
 OPENAI_API_KEY=your_openai_key_here
 TAVILY_API_KEY=your_tavily_key_here
+
+# Optional configuration:
+DEFAULT_MODEL=gpt-4o
+DOCKER_ENABLED=false
+DOCKER_MEMORY_LIMIT=256m
 
 # Alternative: set environment variables directly
 export OPENAI_API_KEY=your_key
@@ -121,11 +137,14 @@ python tests/unit/test_chat_memory.py
 python tests/integration/test_web_search_tools.py
 python tests/integration/test_final_web_tools.py
 python tests/integration/test_query_length_integration.py
+python tests/integration/test_web_tools_fallback.py
+python tests/integration/test_final_answer_improvement.py
 
 # Run demo tests for development
 python tests/demo/test_tavily_search.py
 python tests/demo/test_simple_search.py
 python tests/demo/test_tavily_direct_api.py
+python tests/demo/test_tavily_simple.py
 
 # Run system tests
 python tests/test_backup_system.py
@@ -136,6 +155,10 @@ python tests/test_token_management.py
 python demo_chat_memory.py
 python demo_query_length.py
 python final_answer_demo.py
+python simple_token_test.py
+
+# Run agent-specific tests
+python test_backup_agent.py
 ```
 
 ### Development Workflow
@@ -457,6 +480,7 @@ validate_data_consistency(df)             # Data type consistency checks
 ## Important Notes
 
 - **API Keys**: Both OpenAI and Tavily API keys are required
+- **Environment Setup**: Environment variables can be set in root `.env` or `config/.env`
 - **Language**: Vietnamese language used in prompts and UI
 - **Docker**: Sandbox support exists but is currently disabled
 - **Memory**: Configurable context window for conversation history
@@ -465,3 +489,4 @@ validate_data_consistency(df)             # Data type consistency checks
 - **Backup System**: Automatic and manual backup creation with recovery
 - **Token Management**: Comprehensive usage tracking and optimization
 - **Enhanced Detection**: Advanced structural error detection and handling
+- **Entry Points**: Main app can be started from root `app.py` or `src/core/app.py`

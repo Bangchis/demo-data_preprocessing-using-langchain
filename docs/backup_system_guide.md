@@ -23,7 +23,7 @@ The Data Preprocessing MVP now includes a comprehensive backup system that prote
 
 ### 📊 Backup Management
 - **Statistics**: Track backup usage and storage
-- **Cleanup**: Automatic cleanup of old backups
+- **Management**: Easy backup management and deletion
 - **Export/Import**: Share backups between sessions or users
 
 ## Getting Started
@@ -58,7 +58,7 @@ Ask the agent to create a backup:
 ### 🔄 Automatic Backups
 - **Created**: Before risky operations like drop, merge, transform
 - **Naming**: Auto-generated with timestamp and operation description
-- **Retention**: Automatically cleaned up (keeps last 20 by default)
+- **Retention**: Managed manually through backup panel
 
 ### 📝 Manual Backups
 - **Created**: When you explicitly create them
@@ -113,7 +113,7 @@ Ask the agent to create a backup:
 - **Timeline View**: See all backups chronologically
 - **Expandable Details**: Click to see backup contents
 - **Actions**: Restore or delete individual backups
-- **Cleanup**: Manage old automatic backups
+- **Management**: Delete individual backups as needed
 
 ### ⚙️ Settings Tab
 - **Auto Backup**: Enable/disable automatic backups
@@ -124,7 +124,7 @@ Ask the agent to create a backup:
 
 ### Available Backup Tools
 
-The ReAct agent has 7 backup-related tools:
+The ReAct agent has 8 backup-related tools:
 
 1. **ManualBackup**: Create named backup
    ```
@@ -156,9 +156,14 @@ The ReAct agent has 7 backup-related tools:
    "Xóa backup có ID 'auto_20240117_141200_abcd1234'"
    ```
 
-7. **CleanupBackups**: Clean old automatic backups
+7. **SessionCleanup**: Clean up backups from current session
    ```
-   "Dọn dẹp backup cũ, chỉ giữ lại 10 backup gần nhất"
+   "Dọn dẹp tất cả backup trong session hiện tại"
+   ```
+
+8. **DeleteAllBackups**: Delete all backups in the system (use with caution)
+   ```
+   "Xóa tất cả backup trong hệ thống" (requires confirmation)
    ```
 
 ### Agent Recommendations
@@ -207,8 +212,8 @@ Backups are stored in compressed format:
 ### Managing Storage
 
 1. **Check Usage**: View storage statistics in settings
-2. **Cleanup Old Backups**: Use cleanup functionality
-3. **Delete Unnecessary Backups**: Remove experimental backups
+2. **Delete Unnecessary Backups**: Use backup management interface
+3. **Remove Experimental Backups**: Delete failed experiments
 4. **Export Important Backups**: Save critical backups externally
 
 ### Storage Recommendations
@@ -216,7 +221,7 @@ Backups are stored in compressed format:
 - **Keep**: Important milestones and clean datasets
 - **Delete**: Failed experiments and redundant backups
 - **Export**: Final results and sharable states
-- **Cleanup**: Automatic backups older than 1 week
+- **Monitor**: Keep track of backup usage and storage
 
 ## Advanced Features
 
@@ -256,19 +261,19 @@ The backup system integrates with:
 
 #### Backup Creation Fails
 - **Cause**: Insufficient disk space or permissions
-- **Solution**: Check storage usage, clean up old backups
+- **Solution**: Check storage usage, delete unnecessary backups
 
 #### Restoration Doesn't Work
 - **Cause**: Corrupted backup files
 - **Solution**: Try different backup, check file integrity
 
 #### Missing Backups
-- **Cause**: Backup cleanup or manual deletion
+- **Cause**: Manual deletion or system errors
 - **Solution**: Check deletion history, restore from export
 
 #### Performance Issues
 - **Cause**: Too many backups or large datasets
-- **Solution**: Clean up old backups, optimize storage
+- **Solution**: Delete unnecessary backups, optimize storage
 
 ### Best Practices for Troubleshooting
 
@@ -289,7 +294,7 @@ The backup system integrates with:
 **A**: Yes, in the Settings tab. However, this is not recommended for safety.
 
 ### Q: What happens if I run out of disk space?
-**A**: New backups will fail. Clean up old backups or increase storage.
+**A**: New backups will fail. Delete unnecessary backups or increase storage.
 
 ### Q: Can I backup multiple DataFrames?
 **A**: Yes, the system backs up all DataFrames in your session.

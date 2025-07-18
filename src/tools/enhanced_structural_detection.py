@@ -345,7 +345,7 @@ class StructuralErrorDetector:
                 recommendations.extend([
                     "High inconsistency suggests data source issues - review original data",
                     "Consider standardizing data collection processes",
-                    "Use 'Auto-Clean' feature to fix common inconsistencies"
+                    "Use ReAct agent to fix common inconsistencies"
                 ])
             else:
                 recommendations.extend([
@@ -468,7 +468,7 @@ def detect_advanced_structural_errors(df: pd.DataFrame,
         error_percentage = summary['error_percentage']
         if error_percentage > 25:
             report += f"   🔴 **CRITICAL**: {error_percentage:.1f}% of data has issues - immediate attention required\n"
-            report += f"   • Use 'Auto-Clean' feature to automatically fix common issues\n"
+            report += f"   • Use ReAct agent to automatically fix common issues\n"
             report += f"   • Review data source quality and collection processes\n"
             report += f"   • Consider re-exporting data with proper formatting\n"
         elif error_percentage > 10:
@@ -483,8 +483,8 @@ def detect_advanced_structural_errors(df: pd.DataFrame,
         
         # Specific actions
         report += f"\n   **Immediate Actions:**\n"
-        report += f"   • Open 'Data Quality Dashboard' → 'Auto-Clean' tab\n"
-        report += f"   • Run automatic analysis and cleaning\n"
+        report += f"   • Open 'Data Quality Dashboard' → 'Recommendations' tab\n"
+        report += f"   • Use ReAct agent for automatic analysis and cleaning\n"
         report += f"   • Review cleaning results and re-analyze\n"
         report += f"   • Use ReAct agent for custom cleaning commands\n"
         
